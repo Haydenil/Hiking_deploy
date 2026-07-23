@@ -95,7 +95,10 @@ class G1MujocoBridge(Node):
         self.args = args
 
         # ---------------- MuJoCo model ----------------
-        self.model = mujoco.MjModel.from_xml_path(args.scene)
+        if args.scene.endswith(".mjb"):
+            self.model = mujoco.MjModel.from_binary_path(args.scene)
+        else:
+            self.model = mujoco.MjModel.from_xml_path(args.scene)
         # enlarge the offscreen framebuffer for the depth render resolution
         self.model.vis.global_.offwidth = max(self.model.vis.global_.offwidth, args.depth_width)
         self.model.vis.global_.offheight = max(self.model.vis.global_.offheight, args.depth_height)
@@ -111,6 +114,8 @@ class G1MujocoBridge(Node):
         # spawn roughly at the default pose, gantry holds the rest
         for jname, q0 in DEFAULT_POSE.items():
             self.data.joint(jname).qpos[0] = q0
+        self.data.qpos[0] = args.spawn_x
+        self.data.qpos[1] = args.spawn_y
         self.data.qpos[2] = args.spawn_height
         mujoco.mj_forward(self.model, self.data)
 
@@ -374,6 +379,8 @@ def main():
     parser.add_argument("--depth_fps", type=float, default=30.0)
     parser.add_argument("--timestep", type=float, default=0.002, help="physics dt (default 0.002 = 500Hz; lowstate publishes every step)")
     parser.add_argument("--spawn_height", type=float, default=0.76, help="pelvis spawn z; 0.76 puts the feet on the ground at the default pose so the legs bear weight (like the real start procedure)")
+    parser.add_argument("--spawn_x", type=float, default=0.0, help="pelvis spawn x (use the value printed by gen_training_terrain.py)")
+    parser.add_argument("--spawn_y", type=float, default=0.0, help="pelvis spawn y")
     parser.add_argument("--no-gantry", dest="gantry", action="store_false", default=True, help="start without the virtual gantry")
     parser.add_argument("--headless", action="store_true", help="no viewer window (keyboard unavailable; drive /wirelesscontroller externally)")
     args = parser.parse_args()

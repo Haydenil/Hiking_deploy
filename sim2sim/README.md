@@ -17,6 +17,30 @@ The default scene is the gx_loco_deploy staircase (**0.30 m tread / 0.075 m
 rise — the training stair dimensions**). Point `--scene` at any other MJCF
 that includes the same `g1.xml`.
 
+## Official training terrain (all 10 sub-terrain types)
+
+`gen_training_terrain.py` loads the **exact training terrain config**
+(`ROUGH_TERRAINS_CFG` from InstinctMJ's parkour task: perlin rough plane ×2,
+square gaps, pyramid stairs up/down × normal/high, sparse/dense boxes,
+inverted pyramid slope — a curriculum grid, one terrain type per column,
+difficulty increasing per row) and bakes it into a bridge-ready `.mjb`
+scene with proper heightfield collisions:
+
+```bash
+# one-time generation — needs the mjlab virtualenv (mjlab + torch):
+/home/galbot/mjlab/my_mjlab_project/.venv/bin/python sim2sim/gen_training_terrain.py
+# then run the bridge on it (spawn args are printed by the generator):
+source sim2sim/env_sim.sh
+python sim2sim/g1_mujoco_bridge.py \
+    --scene sim2sim/assets/training_terrain_scene.mjb \
+    --spawn_x -12.00 --spawn_y -36.00 --spawn_height 0.765
+```
+
+Notes: requires the `InstinctMJ` checkout next to this repo; the deploy venv
+pins `mujoco==3.8.1` to match the mjlab venv (`.mjb` is version-locked);
+`--rows/--cols/--seed` reroll the grid. Generated assets live under
+`sim2sim/assets/` (gitignored — regenerate after cloning).
+
 ## Safety model
 
 `sim2sim/env_sim.sh` re-binds DDS to the **loopback interface only**, so

@@ -29,3 +29,6 @@ rosbags/
 
 # backup of instinct_onboard's original upstream .git (restore: mv back to instinct_onboard/.git)
 .git-upstream-backup/
+
+# ---- generated sim2sim assets (regenerate with sim2sim/gen_training_terrain.py) ----
+sim2sim/assets/
