@@ -53,6 +53,7 @@ import numpy as np
 import rclpy
 import zmq
 from rclpy.node import Node
+from std_msgs.msg import Bool
 from unitree_go.msg import WirelessController
 from unitree_hg.msg import IMUState, LowCmd, LowState
 
@@ -143,6 +144,8 @@ class G1MujocoBridge(Node):
         self.imu_pub = self.create_publisher(IMUState, "/secondary_imu", 10)
         self.joy_pub = self.create_publisher(WirelessController, "/wirelesscontroller", 10)
         self.lowcmd_sub = self.create_subscription(LowCmd, "/lowcmd", self._lowcmd_cb, 10)
+        # test/automation interface: same effect as keys 9/8
+        self.gantry_sub = self.create_subscription(Bool, "/sim/gantry", self._gantry_cb, 10)
 
         # ---------------- depth streaming (ZMQ, like stream_depth.py) ----------------
         self.zmq_ctx = zmq.Context()
@@ -176,6 +179,15 @@ class G1MujocoBridge(Node):
                 self.cmd_kd[i] = mc.kd
                 self.cmd_tau[i] = mc.tau
             self.lowcmd_count += 1
+
+    def _gantry_cb(self, msg: Bool):
+        if msg.data and not self.gantry_on:
+            self.gantry_xy = self.data.qpos[0:2].copy()
+        self.gantry_on = bool(msg.data)
+        if not self.gantry_on:
+            self.data.xfrc_applied[self.torso_bid][:] = 0.0
+            self.data.xfrc_applied[self.pelvis_bid][:] = 0.0
+        self.get_logger().info(f"gantry {'ON' if self.gantry_on else 'OFF'} (via /sim/gantry)")
 
     # ------------------------------------------------------------------
     # physics + publications
@@ -213,21 +225,38 @@ class G1MujocoBridge(Node):
             self._last_depth_t = now
 
     def _apply_gantry(self):
-        """Gentle spring-damper 'person holding the robot' applied at the
-        PELVIS (root): vertical support + horizontal damping + mild upright
-        stabilisation. Applying it at the root keeps the waist joints loaded
-        only by the torso's own weight (as when standing), instead of
-        fighting between a rigidly-held torso and grounded legs.
+        """'Safety net + loose leash' gantry at the PELVIS (root).
+
+        Dead-zone design: while the robot stands normally it carries its own
+        full weight and walks freely — the gantry only intervenes when it
+        drops below the catch height (fall) or strays beyond the leash
+        radius. This avoids the earlier failure mode where a constant-uplift
+        gantry carried ~20% of the body weight, so releasing it (key 8) was
+        a sudden load change that toppled the policy.
         Toggle with keys 9 (on) / 8 (off)."""
         z = self.data.qpos[2]
         vz = self.data.qvel[2]
-        fz = 2000.0 * (self.args.spawn_height - z) - 200.0 * vz
-        fx = 300.0 * (self.gantry_xy[0] - self.data.qpos[0]) - 50.0 * self.data.qvel[0]
-        fy = 300.0 * (self.gantry_xy[1] - self.data.qpos[1]) - 50.0 * self.data.qvel[1]
+        catch_z = self.args.spawn_height - 0.06  # below natural standing height
+        fz = 2000.0 * max(catch_z - z, 0.0) - (200.0 * vz if z < catch_z else 0.0)
+        dxy = self.data.qpos[0:2] - self.gantry_xy
+        r = float(np.linalg.norm(dxy))
+        leash = 0.35
+        if r > leash:
+            pull = -300.0 * (r - leash) * (dxy / r)
+            fx = pull[0] - 50.0 * self.data.qvel[0]
+            fy = pull[1] - 50.0 * self.data.qvel[1]
+        else:
+            fx = fy = 0.0
         xmat = self.data.xmat[self.pelvis_bid].reshape(3, 3)
         zaxis = xmat[:, 2]
-        tilt_torque = 150.0 * np.cross(zaxis, np.array([0.0, 0.0, 1.0]))
-        ang_damp = -10.0 * self.data.qvel[3:6]
+        tilt = float(np.degrees(np.arccos(np.clip(zaxis[2], -1.0, 1.0))))
+        # upright assist only beyond 12 deg of pelvis tilt ("spotter's hands")
+        if tilt > 12.0:
+            tilt_torque = 150.0 * np.cross(zaxis, np.array([0.0, 0.0, 1.0]))
+            ang_damp = -10.0 * self.data.qvel[3:6]
+        else:
+            tilt_torque = np.zeros(3)
+            ang_damp = np.zeros(3)
         self.data.xfrc_applied[self.pelvis_bid][:3] = [fx, fy, max(fz, 0.0)]
         self.data.xfrc_applied[self.pelvis_bid][3:] = tilt_torque + ang_damp
         # "hand on the torso": mild upright torque only — the waist kp (28.5)

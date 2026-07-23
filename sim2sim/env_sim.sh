@@ -8,6 +8,7 @@ source "$SIM2SIM_DIR/../setup_env.sh"
 
 export CYCLONEDDS_URI='<CycloneDDS><Domain><General><Interfaces>
     <NetworkInterface name="lo" priority="default" multicast="default"/>
-</Interfaces><AllowMulticast>true</AllowMulticast></General></Domain></CycloneDDS>'
+</Interfaces><AllowMulticast>true</AllowMulticast></General>
+<Discovery><MaxAutoParticipantIndex>120</MaxAutoParticipantIndex></Discovery></Domain></CycloneDDS>'
 
 echo "[env_sim] DDS re-bound to LOOPBACK ONLY — safe for --nodryrun against the MuJoCo bridge."
