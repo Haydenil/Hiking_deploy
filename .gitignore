@@ -32,3 +32,8 @@ rosbags/
 
 # ---- generated sim2sim assets (regenerate with sim2sim/gen_training_terrain.py) ----
 sim2sim/assets/
+
+# third-party checkout used only to (re)generate the training terrain
+InstinctMJ/
+# mujoco crash logs
+MUJOCO_LOG.TXT
