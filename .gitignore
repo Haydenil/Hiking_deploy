@@ -37,3 +37,6 @@ sim2sim/assets/
 InstinctMJ/
 # mujoco crash logs
 MUJOCO_LOG.TXT
+
+# personal command notes
+command.md
