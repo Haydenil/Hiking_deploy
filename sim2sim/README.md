@@ -39,20 +39,23 @@ python instinct_onboard/scripts/g1_parkour_laptop.py \
 Then drive it from the **viewer window** keyboard exactly like the real
 joystick flow:
 
+Letter keys are mostly avoided — the MuJoCo viewer binds many of them to
+visualization toggles (W = wireframe, R = reflection, S = shadow, ...).
+
 | Key | Meaning |
 |---|---|
 | `Enter` | "any button" pulse (wakes the deploy script's buffer wait) |
-| `R` | R1 — cold_start → stand, or parkour → stand |
-| `L` | L1 — stand → parkour |
-| `W` / `S` | forward on / off (vx = +0.5 m/s in parkour) |
-| `A` / `D` | turn left / right (latching) |
-| `Space` | zero all velocity commands |
+| `7` | R1 — cold_start → stand, or parkour → stand |
+| `6` | L1 — stand → parkour |
+| `↑` | forward ON (vx = +0.5 m/s in parkour) |
+| `↓` | STOP — zero all velocity commands |
+| `←` / `→` | turn left / right (latching) |
 | `E` | L2 — emergency-stop test (deploy exits, robot goes limp) |
 | `9` / `8` | virtual gantry on / off ("let go of the robot") |
 
-Suggested sequence: wait for cold start to settle → `R` (stand) → `8`
-(release the gantry, see if the stand policy balances) → `L` (parkour) →
-`W` (walk forward towards the stairs).
+Suggested sequence: wait for cold start to settle → `7` (stand) → `8`
+(release the gantry, see if the stand policy balances) → `6` (parkour) →
+`↑` (walk forward towards the stairs).
 
 ## Notes / limitations
 

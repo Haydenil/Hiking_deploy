@@ -22,12 +22,13 @@ SAFETY: run both this bridge and the deploy script with DDS bound to the
 loopback interface only (source sim2sim/env_sim.sh) so that `--nodryrun`
 commands can physically never reach a real robot.
 
-Keyboard (in the MuJoCo viewer window; keys latch, Space = stop):
-    W / S      : forward on / off           (ly = 1 -> vx = +0.5 m/s)
-    A / D      : turn left / right (latch)  (rx = -/+1 -> yaw +/-)
-    Space      : zero all velocity commands
-    R          : R1 button (cold_start -> stand, parkour -> stand)
-    L          : L1 button (stand -> parkour)
+Keyboard (in the MuJoCo viewer window; letters are avoided because the viewer
+binds many of them to visualization toggles):
+    Up arrow   : forward ON                 (ly = 1 -> vx = +0.5 m/s)
+    Down arrow : STOP (zero all velocities)
+    Left/Right : turn left / right (latching)
+    7          : R1 button (cold_start -> stand, parkour -> stand)
+    6          : L1 button (stand -> parkour)
     E          : L2 button (EMERGENCY STOP test — deploy exits)
     9 / 8      : virtual gantry ON / OFF ("person holding the robot")
     Enter      : any-button pulse (wake up the deploy script's buffer wait)
@@ -290,29 +291,30 @@ class G1MujocoBridge(Node):
     # keyboard
     # ------------------------------------------------------------------
     def key_callback(self, keycode: int):
+        # NOTE: letter keys are avoided on purpose — the MuJoCo viewer binds
+        # many letters to visualization toggles (W=wireframe, R=reflection,
+        # S=shadow, ...). Arrow keys and digits 6-9 are free (digit toggles
+        # only exist for geom groups 0-5).
         now = time.time()
         c = chr(keycode).upper() if 0 <= keycode < 256 else ""
-        if c == "W":
+        if keycode == 265:  # Up arrow
             self.joy_ly = 1.0
             print("[bridge] forward ON  (vx -> +0.5 m/s once in parkour)")
-        elif c == "S":
-            self.joy_ly = 0.0
-            print("[bridge] forward OFF")
-        elif c == "A":
+        elif keycode == 264:  # Down arrow
+            self.joy_ly = self.joy_lx = self.joy_rx = 0.0
+            print("[bridge] STOP (all velocity zeroed)")
+        elif keycode == 263:  # Left arrow
             self.joy_rx = -1.0 if self.joy_rx != -1.0 else 0.0
             print(f"[bridge] turn-left latch rx={self.joy_rx}")
-        elif c == "D":
+        elif keycode == 262:  # Right arrow
             self.joy_rx = 1.0 if self.joy_rx != 1.0 else 0.0
             print(f"[bridge] turn-right latch rx={self.joy_rx}")
-        elif c == " ":
-            self.joy_ly = self.joy_lx = self.joy_rx = 0.0
-            print("[bridge] velocity zeroed")
-        elif c == "R":
+        elif c == "7":
             self.btn_until[BTN_R1] = now + 0.4
-            print("[bridge] R1 pressed")
-        elif c == "L":
+            print("[bridge] R1 pressed (7)")
+        elif c == "6":
             self.btn_until[BTN_L1] = now + 0.4
-            print("[bridge] L1 pressed")
+            print("[bridge] L1 pressed (6)")
         elif c == "E":
             self.btn_until[BTN_L2] = now + 0.4
             print("[bridge] L2 (E-STOP) pressed — deploy script will exit")
@@ -323,6 +325,7 @@ class G1MujocoBridge(Node):
         elif c == "8":
             self.gantry_on = False
             self.data.xfrc_applied[self.torso_bid][:] = 0.0
+            self.data.xfrc_applied[self.pelvis_bid][:] = 0.0
             print("[bridge] gantry OFF — robot on its own")
         elif keycode in (257, 335):  # Enter / keypad Enter
             self.btn_until[BTN_A] = now + 0.4
