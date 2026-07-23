@@ -127,8 +127,6 @@ class G1MujocoBridge(Node):
         self.hold_kp = 60.0
         self.hold_kd = 2.0
         self.gantry_xy = self.data.qpos[0:2].copy()  # horizontal anchor while gantry is on
-        self.spawn_qpos = self.data.qpos.copy()  # full spawn state for Backspace reset
-        self._reset_requested = False
 
         # ---------------- command state ----------------
         self.cmd_lock = threading.Lock()
@@ -199,27 +197,7 @@ class G1MujocoBridge(Node):
     # ------------------------------------------------------------------
     # physics + publications
     # ------------------------------------------------------------------
-    def _do_reset(self):
-        """Reset to the spawn state (pose, position, gantry re-engaged).
-
-        Runs inside the physics loop so it always executes AFTER the viewer's
-        built-in Backspace handling (which resets to qpos0 — the wrong pose
-        and the wrong place on terrain scenes).
-        """
-        self.data.qpos[:] = self.spawn_qpos
-        self.data.qvel[:] = 0.0
-        self.data.ctrl[:] = 0.0
-        self.data.xfrc_applied[:] = 0.0
-        self.gantry_on = True
-        self.gantry_xy = self.data.qpos[0:2].copy()
-        mujoco.mj_forward(self.model, self.data)
-        print("[bridge] RESET to spawn state, gantry ON. "
-              "(Restart the deploy script too for a clean cold start.)")
-
     def step_sim(self):
-        if self._reset_requested:
-            self._reset_requested = False
-            self._do_reset()
         q = self.data.qpos[7 : 7 + NUM_MOTORS]
         dq = self.data.qvel[6 : 6 + NUM_MOTORS]
         with self.cmd_lock:
@@ -386,8 +364,6 @@ class G1MujocoBridge(Node):
         elif keycode in (257, 335):  # Enter / keypad Enter
             self.btn_until[BTN_A] = now + 0.4
             print("[bridge] A pressed (wake-up pulse)")
-        elif keycode == 259:  # Backspace — override the viewer's qpos0 reset
-            self._reset_requested = True
 
     def close(self):
         self.zmq_sock.close(0)
@@ -432,12 +408,6 @@ def main():
                     next_t = time.time()  # fell behind; don't spiral
         else:
             with mujoco.viewer.launch_passive(bridge.model, bridge.data, key_callback=bridge.key_callback) as viewer:
-                # camera follows the robot (mouse still orbits/zooms around it)
-                viewer.cam.type = mujoco.mjtCamera.mjCAMERA_TRACKING
-                viewer.cam.trackbodyid = bridge.pelvis_bid
-                viewer.cam.distance = 3.5
-                viewer.cam.elevation = -15
-                viewer.cam.azimuth = 135
                 print(__doc__.split("Keyboard")[1].split("Usage:")[0])
                 next_t = time.time()
                 sync_every = max(1, int(1 / 60 / dt))
