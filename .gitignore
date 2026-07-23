@@ -1,0 +1,31 @@
+# ---- Python virtual environment (468M, machine-specific) ----
+# Rebuild via instinct_onboard/README.md "Installation — Mode B" steps.
+.venv/
+
+# ---- Third-party sources / workspaces (re-clone & rebuild, see README) ----
+# unitree_ros2: colcon workspace with compiled cyclonedds/rmw/msgs (107M)
+# g1_crc: CRC module sources; the built crc_module.so is arch-specific
+unitree_ros2/
+g1_crc/
+
+# ---- Compiled / machine-specific artifacts ----
+*.so
+__pycache__/
+*.py[cod]
+build/
+install/
+log/
+
+# ---- Tool outputs ----
+depth_vis/
+rosbags/
+*.log
+*.zip
+
+# ---- OS / editor ----
+.DS_Store
+.vscode/
+.idea/
+
+# backup of instinct_onboard's original upstream .git (restore: mv back to instinct_onboard/.git)
+.git-upstream-backup/
