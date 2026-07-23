@@ -141,7 +141,9 @@ class G1MujocoBridge(Node):
         self.joy_ly = 0.0
         self.joy_lx = 0.0
         self.joy_rx = 0.0
+        self._turn_until = 0.0  # arrow-key turns are momentary pulses
         self.btn_until: dict[int, float] = {}  # bit -> wallclock expiry
+        self._btn_pulse = 1.2  # seconds a key-press keeps the button held
         self.gantry_on = bool(args.gantry)
 
         # ---------------- ROS pub/sub ----------------
@@ -243,15 +245,14 @@ class G1MujocoBridge(Node):
         vz = self.data.qvel[2]
         catch_z = self.args.spawn_height - 0.06  # below natural standing height
         fz = 2000.0 * max(catch_z - z, 0.0) - (200.0 * vz if z < catch_z else 0.0)
+        # Gentle always-on horizontal anchor: releasing it stores no force
+        # when the robot stands at the anchor (unlike the vertical uplift,
+        # which was the release-cliff problem), and without it the robot
+        # slowly drifts on its feet during cold start, so the "Reached"
+        # state flickers and single R1 presses are often ignored.
         dxy = self.data.qpos[0:2] - self.gantry_xy
-        r = float(np.linalg.norm(dxy))
-        leash = 0.35
-        if r > leash:
-            pull = -300.0 * (r - leash) * (dxy / r)
-            fx = pull[0] - 50.0 * self.data.qvel[0]
-            fy = pull[1] - 50.0 * self.data.qvel[1]
-        else:
-            fx = fy = 0.0
+        fx = -120.0 * dxy[0] - 30.0 * self.data.qvel[0]
+        fy = -120.0 * dxy[1] - 30.0 * self.data.qvel[1]
         xmat = self.data.xmat[self.pelvis_bid].reshape(3, 3)
         zaxis = xmat[:, 2]
         tilt = float(np.degrees(np.arccos(np.clip(zaxis[2], -1.0, 1.0))))
@@ -301,6 +302,9 @@ class G1MujocoBridge(Node):
         self.imu_pub.publish(imu)
 
     def _publish_joystick(self, now: float):
+        if self.joy_rx != 0.0 and now > self._turn_until:
+            self.joy_rx = 0.0  # momentary turn pulse expired
+            print("[bridge] turn pulse ended, rx=0")
         msg = WirelessController()
         msg.ly = float(self.joy_ly)
         msg.lx = float(self.joy_lx)
@@ -337,17 +341,19 @@ class G1MujocoBridge(Node):
         elif keycode == 264:  # Down arrow
             self.joy_ly = self.joy_lx = self.joy_rx = 0.0
             print("[bridge] STOP (all velocity zeroed)")
-        elif keycode == 263:  # Left arrow
-            self.joy_rx = -1.0 if self.joy_rx != -1.0 else 0.0
-            print(f"[bridge] turn-left latch rx={self.joy_rx}")
-        elif keycode == 262:  # Right arrow
-            self.joy_rx = 1.0 if self.joy_rx != 1.0 else 0.0
-            print(f"[bridge] turn-right latch rx={self.joy_rx}")
+        elif keycode == 263:  # Left arrow — 1s turn pulse, then auto-zero
+            self.joy_rx = -1.0
+            self._turn_until = now + 1.0
+            print("[bridge] turn-left pulse (1s)")
+        elif keycode == 262:  # Right arrow — 1s turn pulse, then auto-zero
+            self.joy_rx = 1.0
+            self._turn_until = now + 1.0
+            print("[bridge] turn-right pulse (1s)")
         elif c == "7":
-            self.btn_until[BTN_R1] = now + 0.4
+            self.btn_until[BTN_R1] = now + self._btn_pulse
             print("[bridge] R1 pressed (7)")
         elif c == "6":
-            self.btn_until[BTN_L1] = now + 0.4
+            self.btn_until[BTN_L1] = now + self._btn_pulse
             print("[bridge] L1 pressed (6)")
         elif c == "E":
             self.btn_until[BTN_L2] = now + 0.4
