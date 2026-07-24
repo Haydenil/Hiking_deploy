@@ -111,9 +111,14 @@ def main():
     cfg.add_lights = False  # scene template provides its own light
     if args.no_noise:
         for name, sub_cfg in cfg.sub_terrains.items():
+            # plane-type terrains carry the noise directly ...
             if hasattr(sub_cfg, "noise_scale"):
                 sub_cfg.noise_scale = [0.0, 0.0]
-        print("perlin surface roughness disabled (--no-noise)")
+            # ... structured terrains (stairs/gaps/boxes/slopes) overlay noise
+            # via a nested perlin_cfg — None disables the overlay entirely
+            if getattr(sub_cfg, "perlin_cfg", None) is not None:
+                sub_cfg.perlin_cfg = None
+        print("perlin surface roughness disabled on ALL sub-terrains (--no-noise)")
 
     import mujoco
     import numpy as np
