@@ -101,6 +101,7 @@ def main():
     parser.add_argument("--rows", type=int, default=4, help="curriculum rows (difficulty levels), default 4")
     parser.add_argument("--cols", type=int, default=10, help="terrain columns (variety), default 10")
     parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument("--no-noise", action="store_true", help="disable the perlin surface roughness: keeps the official terrain geometry (stairs/gaps/boxes) but with smooth surfaces; the rough-plane columns become flat ground")
     args = parser.parse_args()
 
     cfg = copy.deepcopy(load_official_cfg())
@@ -108,6 +109,11 @@ def main():
     cfg.num_cols = args.cols
     cfg.seed = args.seed
     cfg.add_lights = False  # scene template provides its own light
+    if args.no_noise:
+        for name, sub_cfg in cfg.sub_terrains.items():
+            if hasattr(sub_cfg, "noise_scale"):
+                sub_cfg.noise_scale = [0.0, 0.0]
+        print("perlin surface roughness disabled (--no-noise)")
 
     import mujoco
     import numpy as np

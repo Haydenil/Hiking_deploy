@@ -38,8 +38,24 @@ python sim2sim/g1_mujoco_bridge.py \
 
 Notes: requires the `InstinctMJ` checkout next to this repo; the deploy venv
 pins `mujoco==3.8.1` to match the mjlab venv (`.mjb` is version-locked);
-`--rows/--cols/--seed` reroll the grid. Generated assets live under
+`--rows/--cols/--seed` reroll the grid; **`--no-noise` disables the perlin
+surface roughness** (official geometry kept, rough-plane columns become flat
+ground — nicer for interactive driving). Generated assets live under
 `sim2sim/assets/` (gitignored — regenerate after cloning).
+
+## Watching the depth pipeline live
+
+The bridge's ZMQ depth broadcast speaks the same protocol as the robot's, so
+the standard viewer works — run it in a third terminal alongside the deploy
+script (ZMQ PUB supports multiple subscribers):
+
+```bash
+source sim2sim/env_sim.sh
+real_time_img --source zmq --zmq-addr tcp://127.0.0.1:5556 --stages
+```
+
+This opens a window showing the sim's RAW depth render next to every
+processing stage down to the exact observation the policy receives.
 
 ## Safety model
 
