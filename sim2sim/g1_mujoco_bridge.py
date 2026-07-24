@@ -36,6 +36,8 @@ binds many of them to visualization toggles):
                  velocities, re-engages the gantry — press 8 to release)
     * and /    : switch terrain type — next / previous column (wraps around;
                  keypad * required, / works on both keyboards)
+    .          : toggle camera follow <-> free view (follow is the default;
+                 free view lets you drag the camera with the mouse)
     Enter      : any-button pulse (wake up the deploy script's buffer wait)
 
 Usage:
@@ -141,6 +143,10 @@ class G1MujocoBridge(Node):
         self.terrain_origins = None
         self.terrain_level = 0
         self._teleport_target = None  # (row, col) set by +/-, / and * keys; applied in step_sim
+
+        # camera follow mode ('.' toggles); applied by the viewer loop
+        self.follow_cam = True
+        self._cam_dirty = True
         origins_path = os.path.join(os.path.dirname(os.path.abspath(args.scene)), "terrain_origins.json")
         if os.path.exists(origins_path):
             with open(origins_path) as f:
@@ -438,6 +444,10 @@ class G1MujocoBridge(Node):
                 print("[bridge] already at min difficulty level 0")
             else:
                 self._teleport_target = (self.terrain_level - 1, None)
+        elif keycode == 46:  # '.' : toggle camera follow <-> free view
+            self.follow_cam = not self.follow_cam
+            self._cam_dirty = True
+            print(f"[bridge] camera {'FOLLOWS the robot' if self.follow_cam else 'FREE (drag with mouse)'}")
         elif keycode in (47, 331):  # '/' key or keypad / : previous terrain type (column)
             if self.terrain_origins is None:
                 print("[bridge] no terrain_origins.json for this scene — / and * unavailable")
@@ -499,6 +509,17 @@ def main():
                 sync_every = max(1, int(1 / 60 / dt))
                 while viewer.is_running() and rclpy.ok():
                     bridge.step_sim()
+                    if bridge._cam_dirty:
+                        bridge._cam_dirty = False
+                        if bridge.follow_cam:
+                            viewer.cam.type = mujoco.mjtCamera.mjCAMERA_TRACKING
+                            viewer.cam.trackbodyid = bridge.pelvis_bid
+                            viewer.cam.distance = 3.5
+                            viewer.cam.elevation = -15
+                        else:
+                            viewer.cam.type = mujoco.mjtCamera.mjCAMERA_FREE
+                            # aim the free camera at the robot so the view doesn't jump
+                            viewer.cam.lookat[:] = bridge.data.qpos[0:3]
                     if bridge._sim_steps % sync_every == 0:
                         viewer.sync()
                     next_t += dt

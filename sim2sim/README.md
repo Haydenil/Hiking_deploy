@@ -94,6 +94,7 @@ visualization toggles (W = wireframe, R = reflection, S = shadow, ...).
 | `9` / `8` | virtual gantry on / off ("let go of the robot") |
 | `+` / `-` | teleport one terrain **difficulty row** up / down (training-terrain scenes; same column, pose kept, gantry re-engaged — press `8` to release; the deploy script keeps running seamlessly) |
 | `*` / `/` | switch **terrain type** — next / previous column at the current difficulty (wraps around; `*` needs the keypad) |
+| `.` | toggle camera **follow ↔ free**: follow (default) keeps the robot centred, including across `+`/`-`/`*`//` teleports; free lets you drag the view with the mouse (it starts aimed at the robot) |
 
 Suggested sequence: wait for cold start to settle → `7` (stand) → `8`
 (release the gantry, see if the stand policy balances) → `6` (parkour) →
