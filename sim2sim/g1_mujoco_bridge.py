@@ -34,6 +34,8 @@ binds many of them to visualization toggles):
     + / -      : teleport one terrain difficulty row up / down (training-
                  terrain scenes with terrain_origins.json; keeps pose, zeroes
                  velocities, re-engages the gantry — press 8 to release)
+    * and /    : switch terrain type — next / previous column (wraps around;
+                 keypad * required, / works on both keyboards)
     Enter      : any-button pulse (wake up the deploy script's buffer wait)
 
 Usage:
@@ -138,7 +140,7 @@ class G1MujocoBridge(Node):
         # terrain difficulty rows (written by gen_training_terrain.py next to the scene)
         self.terrain_origins = None
         self.terrain_level = 0
-        self._teleport_row = None  # set by +/- keys, applied in step_sim
+        self._teleport_target = None  # (row, col) set by +/-, / and * keys; applied in step_sim
         origins_path = os.path.join(os.path.dirname(os.path.abspath(args.scene)), "terrain_origins.json")
         if os.path.exists(origins_path):
             with open(origins_path) as f:
@@ -219,15 +221,19 @@ class G1MujocoBridge(Node):
     # ------------------------------------------------------------------
     # physics + publications
     # ------------------------------------------------------------------
-    def _teleport_to_row(self, row: int):
-        """Move the robot to the same terrain column on difficulty row `row`.
+    def _current_col(self) -> int:
+        return int(np.argmin(np.abs(self.terrain_origins[0, :, 1] - self.data.qpos[1])))
+
+    def _teleport_to_row(self, row: int, col: int | None = None):
+        """Move the robot to terrain tile (row, col); col=None keeps the column.
 
         Keeps the current joint pose, zeroes all velocities, re-engages the
         gantry at the new spot. The deploy stack keeps running seamlessly —
         its observations contain no world position.
         """
         origins = self.terrain_origins
-        col = int(np.argmin(np.abs(origins[0, :, 1] - self.data.qpos[1])))
+        if col is None:
+            col = self._current_col()
         target = origins[row, col]
         self.data.qpos[0] = target[0]
         self.data.qpos[1] = target[1]
@@ -245,9 +251,9 @@ class G1MujocoBridge(Node):
               f"(press 8 to release)")
 
     def step_sim(self):
-        if self._teleport_row is not None:
-            row, self._teleport_row = self._teleport_row, None
-            self._teleport_to_row(row)
+        if self._teleport_target is not None:
+            (row, col), self._teleport_target = self._teleport_target, None
+            self._teleport_to_row(row, col)
         q = self.data.qpos[7 : 7 + NUM_MOTORS]
         dq = self.data.qvel[6 : 6 + NUM_MOTORS]
         with self.cmd_lock:
@@ -424,14 +430,26 @@ class G1MujocoBridge(Node):
             elif self.terrain_level >= self.terrain_origins.shape[0] - 1:
                 print(f"[bridge] already at max difficulty level {self.terrain_level}")
             else:
-                self._teleport_row = self.terrain_level + 1
+                self._teleport_target = (self.terrain_level + 1, None)
         elif keycode in (45, 333):  # '-' key or keypad - : easier terrain row
             if self.terrain_origins is None:
                 print("[bridge] no terrain_origins.json for this scene — +/- unavailable")
             elif self.terrain_level <= 0:
                 print("[bridge] already at min difficulty level 0")
             else:
-                self._teleport_row = self.terrain_level - 1
+                self._teleport_target = (self.terrain_level - 1, None)
+        elif keycode in (47, 331):  # '/' key or keypad / : previous terrain type (column)
+            if self.terrain_origins is None:
+                print("[bridge] no terrain_origins.json for this scene — / and * unavailable")
+            else:
+                ncols = self.terrain_origins.shape[1]
+                self._teleport_target = (self.terrain_level, (self._current_col() - 1) % ncols)
+        elif keycode == 332:  # keypad * : next terrain type (column)
+            if self.terrain_origins is None:
+                print("[bridge] no terrain_origins.json for this scene — / and * unavailable")
+            else:
+                ncols = self.terrain_origins.shape[1]
+                self._teleport_target = (self.terrain_level, (self._current_col() + 1) % ncols)
 
     def close(self):
         self.zmq_sock.close(0)
