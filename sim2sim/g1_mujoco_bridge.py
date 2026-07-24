@@ -26,7 +26,7 @@ Keyboard (in the MuJoCo viewer window; letters are avoided because the viewer
 binds many of them to visualization toggles):
     Up arrow   : forward ON                 (ly = 1 -> vx = +0.5 m/s)
     Down arrow : STOP (zero all velocities)
-    Left/Right : turn left / right (latching)
+    Left/Right : turn left / right — 1s pulse per press, then auto-zero
     7          : R1 button (cold_start -> stand, parkour -> stand)
     6          : L1 button (stand -> parkour)
     E          : L2 button (EMERGENCY STOP test — deploy exits)

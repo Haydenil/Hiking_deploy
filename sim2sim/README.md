@@ -33,7 +33,7 @@ scene with proper heightfield collisions:
 source sim2sim/env_sim.sh
 python sim2sim/g1_mujoco_bridge.py \
     --scene sim2sim/assets/training_terrain_scene.mjb \
-    --spawn_x -12.00 --spawn_y -36.00 --spawn_height 0.765
+    --spawn_x -12.00 --spawn_y -36.00 --spawn_height 0.760
 ```
 
 Notes: requires the `InstinctMJ` checkout next to this repo; the deploy venv
@@ -89,7 +89,7 @@ visualization toggles (W = wireframe, R = reflection, S = shadow, ...).
 | `6` | L1 — stand → parkour |
 | `↑` | forward ON (vx = +0.5 m/s in parkour) |
 | `↓` | STOP — zero all velocity commands |
-| `←` / `→` | turn left / right (latching) |
+| `←` / `→` | turn left / right — **1 s pulse per press**, then auto-zero (like flicking a real stick) |
 | `E` | L2 — emergency-stop test (deploy exits, robot goes limp) |
 | `9` / `8` | virtual gantry on / off ("let go of the robot") |
 | `+` / `-` | teleport one terrain **difficulty row** up / down (training-terrain scenes; same column, pose kept, gantry re-engaged — press `8` to release; the deploy script keeps running seamlessly) |
@@ -106,11 +106,18 @@ Suggested sequence: wait for cold start to settle → `7` (stand) → `8`
   the first `/lowcmd` arrives — mimicking the real robot's damped "reset"
   state (`L2+A` / `L2+B`), and required so the limp model doesn't fold past
   the deploy stack's joint-protection limits.
-- The gantry anchors the pelvis (vertical spring + horizontal spring +
-  gentle upright torque on pelvis and torso). The torso assist exists
-  because the waist kp (28.5) is marginally below the torso's gravity
-  gradient — without a "steadying hand" the torso sags to a large-angle
-  equilibrium during cold start, exactly as a real robot would.
+- The gantry is a "safety net": vertically it only catches the robot below
+  its normal standing height (so releasing it stores no force — no sudden
+  load change), horizontally it anchors the pelvis with a gentle always-on
+  spring (prevents the slow foot-drift that made cold start's "Reached"
+  state flicker), plus a mild upright torque on pelvis (beyond 12° tilt)
+  and torso. The torso assist exists because the waist kp (28.5) is
+  marginally below the torso's gravity gradient — without a "steadying
+  hand" the torso sags to a large-angle equilibrium during cold start,
+  exactly as a real robot would.
+- With no deploy script running, nothing balances the robot — it may lean
+  over and hang on the gantry (the depth view then shows far-range only).
+  This is expected; start the deploy script for a balanced robot.
 - Depth is rendered noise-free at 848×480@30fps; the deploy-side pipeline
   (mm→m, resize, crop, blur, normalize) is identical to the real path.
 - Scene assets live in the gx_loco_deploy checkout (see `DEFAULT_SCENE` in

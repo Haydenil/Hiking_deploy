@@ -198,6 +198,11 @@ python g1_parkour_laptop.py --nodryrun  # command the real motors
 ```
 Explicit command-line paths always override the environment variables.
 
+**Sim2sim first (Mode B).** Before touching the real robot, the whole
+off-board stack can be validated against a MuJoCo robot impersonator —
+including keyboard driving, the official training terrains and live depth
+viewing. See `../sim2sim/README.md` (in the parent repository).
+
 **Dryrun first.** Without `--nodryrun` (the default) the full pipeline runs but
 motor commands go to a renamed topic `/lowcmd_dryrun_<rand>` — the robot never
 moves. Verify before powering the motors:
