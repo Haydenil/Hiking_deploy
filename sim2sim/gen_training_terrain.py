@@ -163,6 +163,23 @@ def main():
     print(f"wrote {mjb_path} ({os.path.getsize(mjb_path)/1e6:.1f} MB, "
           f"{model.nhfield} heightfield tiles)")
 
+    # export tile origins so the bridge can teleport between difficulty rows
+    # (keys +/- in the viewer)
+    import json
+
+    origins_path = os.path.join(ASSETS_DIR, "terrain_origins.json")
+    with open(origins_path, "w") as f:
+        json.dump(
+            {
+                "origins": origins.tolist(),  # [row][col] -> [x, y, z] platform centre
+                "rows_are_difficulty": True,
+                "columns": list(cfg.sub_terrains.keys()),
+            },
+            f,
+            indent=1,
+        )
+    print(f"wrote {origins_path}")
+
     spawn_z = spawn[2] + 0.76
     print("\nRun it with:\n  source sim2sim/env_sim.sh\n  python sim2sim/g1_mujoco_bridge.py \\\n"
           f"      --scene {os.path.relpath(mjb_path, HIKING_WILD)} \\\n"

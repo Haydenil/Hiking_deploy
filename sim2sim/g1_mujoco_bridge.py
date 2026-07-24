@@ -31,6 +31,9 @@ binds many of them to visualization toggles):
     6          : L1 button (stand -> parkour)
     E          : L2 button (EMERGENCY STOP test — deploy exits)
     9 / 8      : virtual gantry ON / OFF ("person holding the robot")
+    + / -      : teleport one terrain difficulty row up / down (training-
+                 terrain scenes with terrain_origins.json; keeps pose, zeroes
+                 velocities, re-engages the gantry — press 8 to release)
     Enter      : any-button pulse (wake up the deploy script's buffer wait)
 
 Usage:
@@ -44,6 +47,8 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import json
+import os
 import threading
 import time
 
@@ -127,6 +132,21 @@ class G1MujocoBridge(Node):
         self.hold_kp = 60.0
         self.hold_kd = 2.0
         self.gantry_xy = self.data.qpos[0:2].copy()  # horizontal anchor while gantry is on
+        # gantry vertical reference; updated when teleporting between terrain rows
+        self.base_height = float(args.spawn_height)
+
+        # terrain difficulty rows (written by gen_training_terrain.py next to the scene)
+        self.terrain_origins = None
+        self.terrain_level = 0
+        self._teleport_row = None  # set by +/- keys, applied in step_sim
+        origins_path = os.path.join(os.path.dirname(os.path.abspath(args.scene)), "terrain_origins.json")
+        if os.path.exists(origins_path):
+            with open(origins_path) as f:
+                info = json.load(f)
+            self.terrain_origins = np.asarray(info["origins"])  # (rows, cols, 3)
+            self.terrain_columns = info.get("columns", [])
+            print(f"[bridge] terrain difficulty rows loaded: {self.terrain_origins.shape[0]} levels "
+                  f"(keys +/- switch level), columns: {self.terrain_columns}")
 
         # ---------------- command state ----------------
         self.cmd_lock = threading.Lock()
@@ -199,7 +219,35 @@ class G1MujocoBridge(Node):
     # ------------------------------------------------------------------
     # physics + publications
     # ------------------------------------------------------------------
+    def _teleport_to_row(self, row: int):
+        """Move the robot to the same terrain column on difficulty row `row`.
+
+        Keeps the current joint pose, zeroes all velocities, re-engages the
+        gantry at the new spot. The deploy stack keeps running seamlessly —
+        its observations contain no world position.
+        """
+        origins = self.terrain_origins
+        col = int(np.argmin(np.abs(origins[0, :, 1] - self.data.qpos[1])))
+        target = origins[row, col]
+        self.data.qpos[0] = target[0]
+        self.data.qpos[1] = target[1]
+        self.data.qpos[2] = target[2] + 0.78
+        self.data.qpos[3:7] = [1.0, 0.0, 0.0, 0.0]  # upright orientation
+        self.data.qvel[:] = 0.0
+        self.data.xfrc_applied[:] = 0.0
+        self.base_height = float(target[2] + 0.76)
+        self.gantry_xy = self.data.qpos[0:2].copy()
+        self.gantry_on = True
+        self.terrain_level = row
+        mujoco.mj_forward(self.model, self.data)
+        col_name = self.terrain_columns[col] if col < len(self.terrain_columns) else f"col{col}"
+        print(f"[bridge] difficulty level {row}/{origins.shape[0]-1} on '{col_name}', gantry ON "
+              f"(press 8 to release)")
+
     def step_sim(self):
+        if self._teleport_row is not None:
+            row, self._teleport_row = self._teleport_row, None
+            self._teleport_to_row(row)
         q = self.data.qpos[7 : 7 + NUM_MOTORS]
         dq = self.data.qvel[6 : 6 + NUM_MOTORS]
         with self.cmd_lock:
@@ -243,7 +291,7 @@ class G1MujocoBridge(Node):
         Toggle with keys 9 (on) / 8 (off)."""
         z = self.data.qpos[2]
         vz = self.data.qvel[2]
-        catch_z = self.args.spawn_height - 0.06  # below natural standing height
+        catch_z = self.base_height - 0.06  # below natural standing height (follows terrain row)
         fz = 2000.0 * max(catch_z - z, 0.0) - (200.0 * vz if z < catch_z else 0.0)
         # Gentle always-on horizontal anchor: releasing it stores no force
         # when the robot stands at the anchor (unlike the vertical uplift,
@@ -370,6 +418,20 @@ class G1MujocoBridge(Node):
         elif keycode in (257, 335):  # Enter / keypad Enter
             self.btn_until[BTN_A] = now + 0.4
             print("[bridge] A pressed (wake-up pulse)")
+        elif keycode in (61, 334):  # '=' / '+' key or keypad + : harder terrain row
+            if self.terrain_origins is None:
+                print("[bridge] no terrain_origins.json for this scene — +/- unavailable")
+            elif self.terrain_level >= self.terrain_origins.shape[0] - 1:
+                print(f"[bridge] already at max difficulty level {self.terrain_level}")
+            else:
+                self._teleport_row = self.terrain_level + 1
+        elif keycode in (45, 333):  # '-' key or keypad - : easier terrain row
+            if self.terrain_origins is None:
+                print("[bridge] no terrain_origins.json for this scene — +/- unavailable")
+            elif self.terrain_level <= 0:
+                print("[bridge] already at min difficulty level 0")
+            else:
+                self._teleport_row = self.terrain_level - 1
 
     def close(self):
         self.zmq_sock.close(0)

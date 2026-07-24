@@ -92,6 +92,7 @@ visualization toggles (W = wireframe, R = reflection, S = shadow, ...).
 | `←` / `→` | turn left / right (latching) |
 | `E` | L2 — emergency-stop test (deploy exits, robot goes limp) |
 | `9` / `8` | virtual gantry on / off ("let go of the robot") |
+| `+` / `-` | teleport one terrain **difficulty row** up / down (training-terrain scenes; same column, pose kept, gantry re-engaged — press `8` to release; the deploy script keeps running seamlessly) |
 
 Suggested sequence: wait for cold start to settle → `7` (stand) → `8`
 (release the gantry, see if the stand policy balances) → `6` (parkour) →
