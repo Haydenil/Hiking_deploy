@@ -147,33 +147,68 @@ class DepthObsPipeline:
 # Rendering helpers
 # ----------------------------------------------------------------------
 
-def _to_color(img_m: np.ndarray, vmin: float, vmax: float, upscale_to_h: int, label: str) -> np.ndarray:
-    """Colormap a single-channel image and upscale (nearest) to a common height."""
+_BG = 24  # canvas background gray
+
+
+def _to_color(img_m: np.ndarray, vmin: float, vmax: float, upscale_to_h: int, label: str, title_scale: float = 0.55) -> np.ndarray:
+    """Colormap a single-channel image, upscale (nearest) to a target height,
+    and stamp a title bar with a shadowed label."""
     norm = np.clip((img_m - vmin) / max(vmax - vmin, 1e-6), 0.0, 1.0)
     img_u8 = (norm * 255).astype(np.uint8)
     color = cv2.applyColorMap(img_u8, cv2.COLORMAP_TURBO)
     h, w = color.shape[:2]
     scale = upscale_to_h / h
     color = cv2.resize(color, (int(round(w * scale)), upscale_to_h), interpolation=cv2.INTER_NEAREST)
-    cv2.putText(color, f"{label} {img_m.shape[1]}x{img_m.shape[0]}", (6, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 255), 1, cv2.LINE_AA)
+    text = f"{label}  {img_m.shape[1]}x{img_m.shape[0]}"
+    y = int(22 * title_scale / 0.55)
+    cv2.putText(color, text, (8, y + 1), cv2.FONT_HERSHEY_SIMPLEX, title_scale, (0, 0, 0), 3, cv2.LINE_AA)
+    cv2.putText(color, text, (7, y), cv2.FONT_HERSHEY_SIMPLEX, title_scale, (255, 255, 255), 1, cv2.LINE_AA)
     return color
 
 
-def compose_frame(raw_m: np.ndarray, stages: dict[str, np.ndarray], pipeline: DepthObsPipeline, show_stages: bool, panel_h: int = 360) -> np.ndarray:
+def _hstack(panels: list[np.ndarray], margin: int) -> np.ndarray:
+    """Stack panels horizontally on the dark background with margins."""
+    h = max(p.shape[0] for p in panels)
+    total_w = sum(p.shape[1] for p in panels) + margin * (len(panels) + 1)
+    row = np.full((h, total_w, 3), _BG, dtype=np.uint8)
+    x = margin
+    for p in panels:
+        row[: p.shape[0], x : x + p.shape[1]] = p
+        x += p.shape[1] + margin
+    return row
+
+
+def compose_frame(raw_m: np.ndarray, stages: dict[str, np.ndarray], pipeline: DepthObsPipeline, show_stages: bool) -> np.ndarray:
+    """Layout: two LARGE panels on top (raw depth | final policy input);
+    when --stages is on, a row of five small intermediate panels below."""
     vmin, vmax = pipeline.depth_range
-    panels = [_to_color(raw_m, vmin, vmax, panel_h, "raw(m)")]
-    if show_stages:
-        for name in ("1_resize", "2_crop", "3_inpaint", "4_blind_spot", "5_blur"):
-            panels.append(_to_color(stages[name], vmin, vmax, panel_h, name))
     out_lo, out_hi = pipeline.depth_output_range
-    panels.append(_to_color(stages["6_normalized"], out_lo, out_hi, panel_h, "final obs"))
-    sep = np.full((panel_h, 4, 3), 60, dtype=np.uint8)
-    row: list[np.ndarray] = []
-    for i, p in enumerate(panels):
-        if i:
-            row.append(sep)
-        row.append(p)
-    return np.concatenate(row, axis=1)
+    top_h, small_h, margin = 420, 150, 10
+
+    top_row = _hstack(
+        [
+            _to_color(raw_m, vmin, vmax, top_h, "RAW depth (m)", title_scale=0.7),
+            _to_color(stages["6_normalized"], out_lo, out_hi, top_h, "POLICY INPUT (normalized)", title_scale=0.7),
+        ],
+        margin,
+    )
+    rows = [top_row]
+    if show_stages:
+        small = [
+            _to_color(stages[name], vmin, vmax, small_h, name, title_scale=0.45)
+            for name in ("1_resize", "2_crop", "3_inpaint", "4_blind_spot", "5_blur")
+        ]
+        rows.append(_hstack(small, margin))
+
+    width = max(r.shape[1] for r in rows)
+    height = sum(r.shape[0] for r in rows) + margin * (len(rows) + 1)
+    canvas = np.full((height, width, 3), _BG, dtype=np.uint8)
+    y = margin
+    for r in rows:
+        x = (width - r.shape[1]) // 2  # center each row
+        canvas[y : y + r.shape[0], x : x + r.shape[1]] = r
+        y += r.shape[0] + margin
+    return canvas
 
 
 # ----------------------------------------------------------------------
